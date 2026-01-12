@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>scribd-dl UI</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="hero">
+        <div class="hero-badges">
+          <span class="badge">Local downloader</span>
+          <span class="badge badge-outline">Mobile-first UI</span>
+        </div>
+        <h1>scribd-dl Control Room</h1>
+        <p>Paste a supported link, choose a mode, and watch the run live.</p>
+      </header>
+
+      <section class="grid">
+        <form id="download-form" class="card form-card">
+          <label class="field">
+            <span>Document or podcast link</span>
+            <input
+              id="url-input"
+              name="url"
+              type="url"
+              placeholder="https://www.scribd.com/doc/..."
+              required
+              autocomplete="off"
+            />
+          </label>
+
+          <div class="segment">
+            <span class="segment-label">Mode (Scribd only)</span>
+            <div class="segment-group" role="radiogroup">
+              <label class="segment-option">
+                <input type="radio" name="mode" value="default" checked />
+                <span>Default</span>
+              </label>
+              <label class="segment-option">
+                <input type="radio" name="mode" value="image" />
+                <span>Image</span>
+              </label>
+            </div>
+          </div>
+
+          <button id="start-button" class="primary" type="submit">Start download</button>
+          <p class="hint">Image mode uses page snapshots for Scribd documents.</p>
+        </form>
+
+        <aside class="card status-card">
+          <div class="status-head">
+            <div>
+              <h2>Run status</h2>
+              <p>One active job at a time.</p>
+            </div>
+            <span id="status-text" class="status-pill" data-state="idle" aria-live="polite">
+              Idle
+            </span>
+          </div>
+
+          <div class="status-grid">
+            <div>
+              <span class="label">Output folder</span>
+              <span id="output-path" class="value">-</span>
+            </div>
+            <div>
+              <span class="label">Connection</span>
+              <span id="connection-state" class="value" data-connection="live">Live</span>
+            </div>
+          </div>
+
+          <div class="support">
+            <span class="label">Supported URLs</span>
+            <div class="support-tags">
+              <span>scribd.com/doc</span>
+              <span>scribd.com/embeds</span>
+              <span>slideshare.net</span>
+              <span>everand.com/podcast</span>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="stream">
+        <div class="card">
+          <div class="card-header">
+            <h2>Progress</h2>
+            <span class="tag">live</span>
+          </div>
+          <div id="progress-list" class="progress-list"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Logs</h2>
+            <button id="clear-log" class="ghost" type="button">Clear</button>
+          </div>
+          <div id="log" class="log" role="log" aria-live="polite"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
