@@ -14,6 +14,12 @@ class App {
         return App.instance
     }
 
+    /**
+     * @param {string} url 
+     * @param {string} flag 
+     * @param {object} reporter 
+     * @returns {Promise<string>} The output path of the downloaded file
+     */
     async execute(url, flag, reporter = cliReporter) {
         if (!url) {
             throw new Error("URL cannot be empty")
@@ -21,11 +27,11 @@ class App {
 
         try {
             if (url.match(scribdRegex.DOMAIN)) {
-                await scribdDownloader.execute(url, flag, reporter)
+                return await scribdDownloader.execute(url, flag, reporter)
             } else if (url.match(slideshareRegex.DOMAIN)) {
-                await slideshareDownloader.execute(url, reporter)
+                return await slideshareDownloader.execute(url, reporter)
             } else if (url.match(everandRegex.DOMAIN)) {
-                await everandDownloader.execute(url, reporter)
+                return await everandDownloader.execute(url, reporter)
             } else {
                 throw new Error(`Unsupported URL: ${url}`)
             }

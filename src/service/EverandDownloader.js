@@ -22,15 +22,16 @@ class EverandDownloader extends BaseDownloader {
     /**
      * @param {string} url 
      * @param {object} reporter 
+     * @returns {Promise<string>} output path (folder or file)
      */
     async execute(url, reporter = cliReporter) {
         if (url.match(everandRegex.PODCAST_SERIES)) {
-            await this._processSeries(url, reporter)
+            return await this._processSeries(url, reporter)
         } else if (url.match(everandRegex.PODCAST_EPISODE)) {
             const id = everandRegex.PODCAST_EPISODE.exec(url)[1]
-            await this._processListen(`https://www.everand.com/listen/podcast/${id}`, true, reporter)
+            return await this._processListen(`https://www.everand.com/listen/podcast/${id}`, true, reporter)
         } else if (url.match(everandRegex.PODCAST_LISTEN)) {
-            await this._processListen(url, true, reporter)
+            return await this._processListen(url, true, reporter)
         } else {
             throw new Error(`Unsupported URL: ${url}`)
         }
@@ -98,22 +99,12 @@ class EverandDownloader extends BaseDownloader {
                 reporter.log(`Saved: ${filePath}`)
             }
 
+            return filePath
+
         } catch (error) {
             throw error
         } finally {
-            if (page && isStandalone) {
-                // Only close page if it's a standalone call. 
-                // However, logic below suggests we should close page regardless of context if we opened it here?
-                // The original code passed 'isEpisode' (standalone) to decide whether to close puppeteer entirely.
-                // Here we just close the page. PuppeteerSg manages browser lifecycle.
-                await page.close()
-                if (isStandalone) {
-                     // In standalone mode, we might want to close browser if it was just for this task?
-                     // PuppeteerSg is singleton, so maybe we don't force close browser here to allow reuse?
-                     // Original code: await puppeteerSg.close() if isEpisode.
-                     // Let's stick to closing page. If the app is done, the process exit will close browser.
-                }
-            } else if (page) {
+            if (page) {
                 await page.close()
             }
         }
@@ -121,7 +112,15 @@ class EverandDownloader extends BaseDownloader {
 
     async _processSeries(url, reporter) {
         let page
+        // Series download is more complex as it generates multiple files.
+        // For now, we will return the directory path.
+        let seriesId = "Unknown_Series"
+
         try {
+            const seriesMatch = everandRegex.PODCAST_SERIES.exec(url)
+            if (seriesMatch) seriesId = seriesMatch[1]
+            const dir = path.join(this.output, seriesId)
+
             // 1. Navigate
             page = await puppeteerSg.getPage(url)
             await this.wait(1000)
@@ -161,9 +160,6 @@ class EverandDownloader extends BaseDownloader {
                 })
 
                 for (let j = 0; j < episodes.length; j++) {
-                    // Reuse _processListen but as part of series (isStandalone = false)
-                    // We need to manage the page/browser carefully. 
-                    // Since _processListen opens a NEW page, it's safe to call.
                     await this._processListen(episodes[j], false, reporter)
                     
                     const completedCount = ((i - 1) * 10) + (j + 1)
@@ -171,6 +167,8 @@ class EverandDownloader extends BaseDownloader {
                 }
             }
             seriesProgress.stop()
+
+            return dir
 
         } catch (error) {
             throw error

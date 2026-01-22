@@ -27,6 +27,7 @@ class ScribdDownloader extends BaseDownloader {
      * @param {string} url 
      * @param {string} flag 
      * @param {object} reporter 
+     * @returns {Promise<string>} output path
      */
     async execute(url, flag, reporter = cliReporter) {
         let executionMethod
@@ -44,9 +45,9 @@ class ScribdDownloader extends BaseDownloader {
         if (docMatch) {
             const id = docMatch[2]
             const embedUrl = `https://www.scribd.com/embeds/${id}/content`
-            await executionMethod(embedUrl, reporter)
+            return await executionMethod(embedUrl, reporter)
         } else if (embedMatch) {
-            await executionMethod(url, reporter)
+            return await executionMethod(url, reporter)
         } else {
             throw new Error(`Unsupported URL format: ${url}`)
         }
@@ -199,6 +200,8 @@ class ScribdDownloader extends BaseDownloader {
             // 8. Cleanup
             await directoryIo.remove(tempDir)
 
+            return finalPdfPath
+
         } catch (error) {
             throw error
         } finally {
@@ -229,7 +232,7 @@ class ScribdDownloader extends BaseDownloader {
             } catch (ignored) {}
 
             const identifier = `${sanitize(this.filename === "title" ? title : id)}`
-            const tempDir = path.join(this.output, id) // Use ID for temp dir to avoid collisions? Or identifier? Original used ID.
+            const tempDir = path.join(this.output, id) 
             await directoryIo.create(tempDir)
 
             // 3. Hide blockers
@@ -293,6 +296,8 @@ class ScribdDownloader extends BaseDownloader {
 
             // 6. Cleanup
             await directoryIo.remove(tempDir)
+
+            return finalPdfPath
 
         } catch (error) {
             throw error

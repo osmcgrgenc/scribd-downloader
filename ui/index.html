@@ -3,8 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Scribd-DL / NeoGlass Control</title>
+    <meta name="theme-color" content="#6c5ce7" />
+    <title>Lifinize Online Downloader</title>
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" href="/assets/favicon.png" />
+    <link rel="apple-touch-icon" href="/assets/icon-192.png" />
   </head>
   <body>
     <main class="app">
@@ -85,6 +89,12 @@
         <div class="card glass-panel">
           <div class="card-header">
             <h2>Live Progress</h2>
+            <!-- Download Button Container (Hidden by default) -->
+            <div id="download-container" style="display: none;">
+              <a id="download-link" href="#" class="neo-btn primary" style="padding: 8px 16px; font-size: 0.9rem; text-decoration: none;" target="_blank">
+                Download File
+              </a>
+            </div>
           </div>
           <div id="progress-list" class="progress-list">
             <!-- Dynamic Progress Items will appear here -->
@@ -104,5 +114,14 @@
     </main>
 
     <script src="/app.js"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('SW registered:', reg.scope))
+            .catch(err => console.log('SW registration failed:', err));
+        });
+      }
+    </script>
   </body>
 </html>

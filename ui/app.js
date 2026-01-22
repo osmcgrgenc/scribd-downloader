@@ -11,7 +11,9 @@ const els = {
   progressList: $("#progress-list"),
   logList: $("#log"),
   startButton: $("#start-button"),
-  clearLogButton: $("#clear-log")
+  clearLogButton: $("#clear-log"),
+  downloadContainer: $("#download-container"),
+  downloadLink: $("#download-link")
 }
 
 const appState = {
@@ -78,6 +80,21 @@ function setActiveJobId(id) {
     }
 }
 
+function showDownloadLink(url) {
+    if (els.downloadContainer && els.downloadLink && url) {
+        els.downloadLink.href = url
+        els.downloadContainer.style.display = "block"
+        // Optional: Trigger a pulse animation
+        els.downloadLink.classList.add("pulse")
+    }
+}
+
+function hideDownloadLink() {
+    if (els.downloadContainer) {
+        els.downloadContainer.style.display = "none"
+    }
+}
+
 function clearProgress() {
   progressMap.clear()
   if (els.progressList) els.progressList.innerHTML = ""
@@ -92,6 +109,7 @@ function resetRun() {
   setActiveJobId(null)
   clearProgress()
   clearLogs()
+  hideDownloadLink()
 }
 
 function formatTime(date) {
@@ -197,6 +215,15 @@ if (els.form) {
       if (!resp.ok) {
         throw new Error(payload.error || "Failed to start")
       }
+      
+      // If server returns 'completed' state immediately (from cache)
+      if (payload.status === 'completed' && payload.downloadUrl) {
+          showDownloadLink(payload.downloadUrl)
+          addLog("File found in cache. Download ready.")
+          setStatus("completed", "Completed")
+          return
+      }
+
       appState.jobId = payload.jobId
       setActiveJobId(payload.jobId)
       addLog(`Job accepted: ${appState.jobId}`)
@@ -235,6 +262,11 @@ stream.addEventListener("status", (event) => {
     return
   }
 
+  // Handle Download URL
+  if (data.downloadUrl) {
+      showDownloadLink(data.downloadUrl)
+  }
+
   switch (data.state) {
     case "running":
       appState.jobId = data.jobId
@@ -244,6 +276,7 @@ stream.addEventListener("status", (event) => {
     case "completed":
       setStatus("completed", "Completed")
       addLog("Job cycle completed successfully.")
+      if (data.message) addLog(data.message)
       break
     case "failed":
       setStatus("failed", "Failed")

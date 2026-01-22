@@ -26,15 +26,16 @@ class SlideshareDownloader extends BaseDownloader {
     /**
      * @param {string} url 
      * @param {object} reporter 
+     * @returns {Promise<string>} output path
      */
     async execute(url, reporter = cliReporter) {
         const slideshowMatch = slideshareRegex.SLIDESHOW.exec(url)
         const pptMatch = slideshareRegex.PPT.exec(url)
 
         if (slideshowMatch) {
-            await this._processSlideshow(url, slideshowMatch[1], reporter)
+            return await this._processSlideshow(url, slideshowMatch[1], reporter)
         } else if (pptMatch) {
-            await this._processSlideshow(url, pptMatch[1], reporter)
+            return await this._processSlideshow(url, pptMatch[1], reporter)
         } else {
             throw new Error(`Unsupported URL: ${url}`)
         }
@@ -101,6 +102,8 @@ class SlideshareDownloader extends BaseDownloader {
 
             // 6. Cleanup
             await directoryIo.remove(tempDir)
+
+            return finalPdfPath
 
         } catch (error) {
             throw error

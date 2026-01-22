@@ -1,0 +1,21 @@
+{
+  "name": "Lifinize Downloader",
+  "short_name": "Lifinize",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#e0e5ec",
+  "theme_color": "#6c5ce7",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/assets/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/assets/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}

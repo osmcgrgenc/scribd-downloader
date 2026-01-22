@@ -2,10 +2,11 @@ import http from "http"
 import path from "path"
 import { fileURLToPath } from "url"
 import fs from "fs/promises"
+import { createReadStream, readFileSync, existsSync } from "fs"
 import { app } from "./src/App.js"
 import * as scribdFlag from "./src/const/ScribdFlag.js"
 import { configLoader } from "./src/utils/io/ConfigLoader.js"
-import { readFileSync } from "fs"
+import { database } from "./src/utils/db/Database.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const uiDir = path.join(__dirname, "ui")
@@ -29,7 +30,11 @@ let progressCounter = 0
 const contentTypes = {
     ".html": "text/html; charset=utf-8",
     ".css": "text/css; charset=utf-8",
-    ".js": "text/javascript; charset=utf-8"
+    ".js": "text/javascript; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon"
 }
 
 function sendJson(res, status, payload) {
@@ -95,9 +100,33 @@ async function readJson(req) {
     })
 }
 
-function startJob(url, mode) {
+async function startJob(url, mode) {
     const jobId = `job-${Date.now()}-${++jobCounter}`
     activeJob = { id: jobId, url, startedAt: Date.now() }
+    
+    // Check DB first (Deduplication)
+    try {
+        const record = await database.get(url)
+        if (record && existsSync(record.file_path)) {
+            const fileName = path.basename(record.file_path)
+            const downloadUrl = `/api/download/${fileName}`
+            
+            // Immediately complete
+            broadcast("status", { 
+                state: "completed", 
+                jobId, 
+                url, 
+                output: outputDir, 
+                downloadUrl,
+                message: "Found in cache" 
+            })
+            activeJob = null
+            return jobId
+        }
+    } catch (err) {
+        console.error("DB Error:", err)
+    }
+
     broadcast("status", { state: "running", jobId, url, output: outputDir })
 
     const reporter = createUiReporter(jobId)
@@ -106,8 +135,19 @@ function startJob(url, mode) {
     const flag = mode === "image" ? scribdFlag.IMAGE : undefined
     void (async () => {
         try {
-            await app.execute(url, flag, reporter)
-            broadcast("status", { state: "completed", jobId, url })
+            const outputPath = await app.execute(url, flag, reporter)
+            
+            // Save to DB
+            const fileName = path.basename(outputPath)
+            await database.save(url, outputPath)
+            
+            const downloadUrl = `/api/download/${fileName}`
+            broadcast("status", { 
+                state: "completed", 
+                jobId, 
+                url, 
+                downloadUrl 
+            })
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error)
             reporter.error(message)
@@ -168,7 +208,7 @@ const server = http.createServer(async (req, res) => {
                 sendJson(res, 400, { error: "URL is required." })
                 return
             }
-            const jobId = startJob(url, mode)
+            const jobId = await startJob(url, mode)
             sendJson(res, 202, { jobId })
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error)
@@ -177,7 +217,43 @@ const server = http.createServer(async (req, res) => {
         return
     }
 
-    // 4. Static Files
+    // 4. File Download API
+    if (pathname.startsWith("/api/download/") && req.method === "GET") {
+        const fileName = decodeURIComponent(pathname.replace("/api/download/", ""))
+        
+        // Security check: Prevent directory traversal
+        if (fileName.includes("..") || fileName.includes("/")) {
+            res.writeHead(403)
+            res.end("Access Denied")
+            return
+        }
+
+        const filePath = path.join(outputDir, fileName)
+        
+        try {
+            if (!existsSync(filePath)) {
+                res.writeHead(404)
+                res.end("File not found")
+                return
+            }
+
+            const stat = await fs.stat(filePath)
+            res.writeHead(200, {
+                "Content-Type": "application/octet-stream",
+                "Content-Length": stat.size,
+                "Content-Disposition": `attachment; filename="${fileName}"`
+            })
+            
+            createReadStream(filePath).pipe(res)
+        } catch (err) {
+            console.error("Download error:", err)
+            res.writeHead(500)
+            res.end("Internal Server Error")
+        }
+        return
+    }
+
+    // 5. Static Files
     if (req.method === "GET") {
         const safePath = pathname === "/" ? "/index.html" : pathname
         const resolvedPath = path.resolve(uiDir, `.${safePath}`)
