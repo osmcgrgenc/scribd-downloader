@@ -1,4 +1,4 @@
-import fs from 'fs'
+import { mkdir, rm } from 'fs/promises'
 
 class DirectoryIo {
     constructor() {
@@ -9,24 +9,28 @@ class DirectoryIo {
     }
 
     /**
-     * Create directories (recursive)
-     * @param {string} dest
-     *        path of a directory
+     * Create directories recursively
+     * @param {string} dest - Directory path
      */
     async create(dest) {
-        fs.mkdirSync(dest, { recursive: true }, (err) => {
-            if (err) throw err;
-        })
+        try {
+            await mkdir(dest, { recursive: true })
+        } catch (err) {
+            throw new Error(`Failed to create directory ${dest}: ${err.message}`)
+        }
     }
 
     /**
-     * Remove directories (recursive)
-     * @param {string} dest 
+     * Remove directories recursively
+     * @param {string} dest - Directory path
      */
     async remove(dest) {
-        fs.rmSync(dest, { recursive: true }, (err) => {
-            if (err) throw err;
-        })
+        try {
+            await rm(dest, { recursive: true, force: true })
+        } catch (err) {
+            // Warn but don't crash on cleanup failure usually
+            console.warn(`Failed to cleanup directory ${dest}: ${err.message}`)
+        }
     }
 }
 

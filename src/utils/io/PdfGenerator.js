@@ -1,12 +1,7 @@
 import { promises as fs } from 'fs'
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument } from 'pdf-lib'
+import path from 'path'
 
-// eslint-disable-next-line
-import { Image } from '../../object/Image.js'
-
-/**
- * Singleton PDF generator using pdf-lib
- */
 class PdfGenerator {
     constructor() {
         if (!PdfGenerator.instance) {
@@ -17,78 +12,85 @@ class PdfGenerator {
 
     /**
      * Generate PDF from images
-     * @param {Image[]} images - Array of Image objects with .path, .width, .height
-     * @param {string} outputPath - Destination path for the generated PDF
-     * @param {{ log: (message: string) => void }=} reporter - Optional reporter for logs
-     * @throws {Error} If no images, file not found, or unsupported format
+     * @param {import('../../object/Image.js').Image[]} images 
+     * @param {string} outputPath 
+     * @param {object} [reporter] 
      */
     async generate(images, outputPath, reporter) {
-        const logger = reporter && typeof reporter.log === "function" ? reporter : null
-        if (!images?.length) {
-            throw new Error("no images provided");
+        if (!images || images.length === 0) {
+            throw new Error("No images provided for PDF generation")
         }
-        const pdfDoc = await PDFDocument.create();
-        for (const { path, width, height } of images) {
-            // read image file
-            let imageBytes;
+
+        const pdfDoc = await PDFDocument.create()
+
+        for (const img of images) {
+            let imageBytes
             try {
-                imageBytes = await fs.readFile(path);
+                imageBytes = await fs.readFile(img.path)
             } catch (err) {
-                throw new Error(`Failed to read image: ${path} — ${err.message}`);
-            }
-            
-            // embed image based on its format
-            const ext = path.split('.').pop().toLowerCase();
-            let embedImage;
-            if (['jpg', 'jpeg'].includes(ext)) {
-                embedImage = await pdfDoc.embedJpg(imageBytes);
-            } else if (ext === 'png') {
-                embedImage = await pdfDoc.embedPng(imageBytes);
-            } else {
-                throw new Error(`Unsupported image format: ${ext}`);
+                throw new Error(`Failed to read image ${img.path}: ${err.message}`)
             }
 
-            // add a new page with the image
-            const page = pdfDoc.addPage([width, height]);
+            const ext = path.extname(img.path).toLowerCase()
+            let embedImage
+
+            if (ext === '.jpg' || ext === '.jpeg') {
+                embedImage = await pdfDoc.embedJpg(imageBytes)
+            } else if (ext === '.png') {
+                embedImage = await pdfDoc.embedPng(imageBytes)
+            } else {
+                throw new Error(`Unsupported image format: ${ext}`)
+            }
+
+            const page = pdfDoc.addPage([img.width, img.height])
             page.drawImage(embedImage, {
                 x: 0,
                 y: 0,
-                width,
-                height,
-            });
+                width: img.width,
+                height: img.height,
+            })
         }
+
         try {
-            const pdfBytes = await pdfDoc.save();
-            await fs.writeFile(outputPath, pdfBytes);
-            if (logger) {
-                logger.log(`Generated: ${outputPath}`)
-            } else {
-                console.log(`Generated: ${outputPath}`);
+            const pdfBytes = await pdfDoc.save()
+            await fs.writeFile(outputPath, pdfBytes)
+            if (reporter && typeof reporter.log === 'function') {
+                reporter.log(`Generated PDF: ${outputPath}`)
             }
         } catch (err) {
-            throw new Error(`Failed to save PDF: ${outputPath} — ${err.message}`);
+            throw new Error(`Failed to save PDF to ${outputPath}: ${err.message}`)
         }
     }
 
     /**
-     * Merge PDFs to a single PDF
-     * @param {string[]} inputPdfPaths Path of input PDFs to merge
-     * @param {string} outputPath Path to save the merged PDF
+     * Merge multiple PDFs into one
+     * @param {string[]} inputPdfPaths 
+     * @param {string} outputPath 
      */
     async merge(inputPdfPaths, outputPath) {
-        if (inputPdfPaths.length === 0) {
-            throw new Error("no PDFs provided");
+        if (!inputPdfPaths || inputPdfPaths.length === 0) {
+            throw new Error("No input PDFs provided for merge")
         }
-        const merged = await PDFDocument.create();
+
+        const merged = await PDFDocument.create()
+
         for (const pdfPath of inputPdfPaths) {
-            const pdfBytes = await fs.readFile(pdfPath);
-            const pdfDoc = await PDFDocument.load(pdfBytes);
-            const copiedPages = await merged.copyPages(pdfDoc, pdfDoc.getPageIndices());
-            copiedPages.forEach(page => merged.addPage(page));
+            try {
+                const pdfBytes = await fs.readFile(pdfPath)
+                const pdfDoc = await PDFDocument.load(pdfBytes)
+                const copiedPages = await merged.copyPages(pdfDoc, pdfDoc.getPageIndices())
+                copiedPages.forEach(page => merged.addPage(page))
+            } catch (err) {
+                throw new Error(`Failed to merge PDF ${pdfPath}: ${err.message}`)
+            }
         }
-        const mergedBytes = await merged.save();
-        await fs.writeFile(outputPath, mergedBytes);
-        console.log(`Merged: ${outputPath}`);
+
+        try {
+            const mergedBytes = await merged.save()
+            await fs.writeFile(outputPath, mergedBytes)
+        } catch (err) {
+            throw new Error(`Failed to save merged PDF to ${outputPath}: ${err.message}`)
+        }
     }
 }
 

@@ -1,8 +1,8 @@
 {
-  "name": "scribd-dl",
+  "name": "lifinize-dl",
   "version": "1.0.0",
-  "description": "Scribd Document Downloader",
-  "main": "index.js",
+  "description": "Premium Document & Podcast Downloader - Powered by Lifinize",
+  "main": "run.js",
   "scripts": {
     "start": "node run.js",
     "start:ui": "node ui.js",
@@ -11,10 +11,16 @@
     "test:cov": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "lint": "eslint --fix \"{src,apps,libs}/**/*.js\""
   },
-  "keywords": [],
+  "keywords": [
+    "scribd",
+    "slideshare",
+    "everand",
+    "downloader",
+    "lifinize"
+  ],
   "author": {
-    "name": "ray.yukawai",
-    "email": "ray.yukawai@gmail.com"
+    "name": "Lifinize Team",
+    "email": "support@lifinize.online"
   },
   "license": "GPL-3.0-or-later",
   "dependencies": {
@@ -27,7 +33,6 @@
     "sharp": "^0.33.3"
   },
   "type": "module",
-  "types": "module",
   "devDependencies": {
     "@eslint/js": "^9.1.1",
     "eslint": "^9.1.1",

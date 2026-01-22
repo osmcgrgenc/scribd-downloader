@@ -5,11 +5,21 @@ import fs from "fs/promises"
 import { app } from "./src/App.js"
 import * as scribdFlag from "./src/const/ScribdFlag.js"
 import { configLoader } from "./src/utils/io/ConfigLoader.js"
+import { readFileSync } from "fs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const uiDir = path.join(__dirname, "ui")
 const port = Number(process.env.UI_PORT || 4173)
 const outputDir = configLoader.load("DIRECTORY", "output")
+
+// Load version
+let appVersion = "1.0.0"
+try {
+    const pkg = JSON.parse(readFileSync(path.join(__dirname, "package.json"), "utf-8"))
+    appVersion = pkg.version
+} catch (e) {
+    console.warn("Failed to load version from package.json")
+}
 
 const clients = new Set()
 let activeJob = null
@@ -114,6 +124,7 @@ const server = http.createServer(async (req, res) => {
     const requestUrl = new URL(req.url, `http://${req.headers.host}`)
     const { pathname } = requestUrl
 
+    // 1. SSE Stream
     if (pathname === "/api/stream" && req.method === "GET") {
         res.writeHead(200, {
             "Content-Type": "text/event-stream",
@@ -133,11 +144,17 @@ const server = http.createServer(async (req, res) => {
         return
     }
 
+    // 2. Config & Info API
     if (pathname === "/api/config" && req.method === "GET") {
-        sendJson(res, 200, { output: outputDir })
+        sendJson(res, 200, { 
+            output: outputDir,
+            version: appVersion,
+            appName: "Lifinize Downloader"
+        })
         return
     }
 
+    // 3. Start Job API
     if (pathname === "/api/start" && req.method === "POST") {
         if (activeJob) {
             sendJson(res, 409, { error: "A download is already running." })
@@ -160,6 +177,7 @@ const server = http.createServer(async (req, res) => {
         return
     }
 
+    // 4. Static Files
     if (req.method === "GET") {
         const safePath = pathname === "/" ? "/index.html" : pathname
         const resolvedPath = path.resolve(uiDir, `.${safePath}`)
@@ -187,4 +205,5 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(port, () => {
     console.log(`UI running at http://localhost:${port}`)
+    console.log(`Version: ${appVersion}`)
 })

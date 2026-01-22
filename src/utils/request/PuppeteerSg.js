@@ -4,53 +4,99 @@ class PuppeteerSg {
   constructor() {
     if (!PuppeteerSg.instance) {
       PuppeteerSg.instance = this;
-      process.on('exit', () => {
-        this.close();
+      this.browser = null;
+      this.isClosing = false;
+      
+      // Cleanup on process exit
+      this._cleanupHandler = this.close.bind(this);
+      process.on('exit', this._cleanupHandler);
+      process.on('SIGINT', this._cleanupHandler);
+      process.on('SIGTERM', this._cleanupHandler);
+      process.on('uncaughtException', async (err) => {
+        console.error('Uncaught Exception:', err);
+        await this.close();
+        process.exit(1);
       });
     }
     return PuppeteerSg.instance;
   }
 
   /**
-   * Launch a browser
+   * Launch a browser instance if not already running
    */
   async launch() {
-    const isCI = process.env.CI === 'true'; // Detect if running in CI
-    const args = [];
-    if (isCI) {
-      args.push('--no-sandbox', '--disable-setuid-sandbox');
+    if (this.browser) return;
+
+    const isCI = process.env.CI === 'true';
+    const args = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--disable-gpu'
+    ];
+
+    try {
+      this.browser = await puppeteer.launch({
+        headless: "new",
+        defaultViewport: null,
+        args: isCI ? args : [],
+        timeout: 30000, // 30s timeout for launch
+      });
+      
+      this.browser.on('disconnected', () => {
+        this.browser = null;
+      });
+      
+    } catch (error) {
+      console.error("Failed to launch Puppeteer:", error);
+      throw error;
     }
-    this.browser = await puppeteer.launch({
-      headless: "new",
-      defaultViewport: null,
-      args,
-      timeout: 0,
-    });
   }
 
   /**
-   * New a page
+   * Create a new page
    * @param {string} url 
-   * @returns 
+   * @returns {Promise<import('puppeteer').Page>}
    */
   async getPage(url) {
     if (!this.browser) {
-      await this.launch()
+      await this.launch();
     }
-    let page = await this.browser.newPage()
-    await page.goto(url, {
-      waitUntil: "load",
-    })
-    return page
+    
+    try {
+      const page = await this.browser.newPage();
+      
+      // Basic stealth / fingerprinting mitigation could be added here
+      await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      
+      if (url) {
+        await page.goto(url, {
+          waitUntil: "networkidle2", // Better than "load" for SPA/heavy sites
+          timeout: 60000 
+        });
+      }
+      return page;
+    } catch (error) {
+      console.error(`Failed to open page ${url}:`, error);
+      throw error;
+    }
   }
 
   /**
-   * Close the browser
+   * Close the browser instance
    */
   async close() {
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
+    if (this.browser && !this.isClosing) {
+      this.isClosing = true;
+      try {
+        await this.browser.close();
+      } catch (err) {
+        // Ignore errors during close (e.g. already closed)
+      } finally {
+        this.browser = null;
+        this.isClosing = false;
+      }
     }
   }
 }

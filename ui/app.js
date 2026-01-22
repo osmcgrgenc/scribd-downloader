@@ -4,8 +4,10 @@ const els = {
   form: $("#download-form"),
   urlInput: $("#url-input"),
   statusText: $("#status-text"),
+  statusDot: $("#status-dot"),
   outputPath: $("#output-path"),
   connectionState: $("#connection-state"),
+  activeJobId: $("#active-job-id"),
   progressList: $("#progress-list"),
   logList: $("#log"),
   startButton: $("#start-button"),
@@ -29,38 +31,65 @@ const statusLabels = {
 const maxLogLines = 200
 
 function setConnectionState(state) {
-  if (!els.connectionState) {
-    return
-  }
+  if (!els.connectionState) return
+  
   const label = state === "down" ? "Disconnected" : "Live"
   els.connectionState.textContent = label
-  els.connectionState.dataset.connection = state
+  els.connectionState.style.color = state === "down" ? "var(--error)" : "var(--success)"
 }
 
 function setBusy(isBusy) {
   appState.running = isBusy
-  els.startButton.disabled = isBusy
-  els.startButton.textContent = isBusy ? "Downloading..." : "Start download"
+  if (els.startButton) {
+    els.startButton.disabled = isBusy
+    const btnSpan = els.startButton.querySelector("span")
+    if (btnSpan) {
+        btnSpan.textContent = isBusy ? "Processing..." : "Start Download Process"
+    } else {
+        els.startButton.textContent = isBusy ? "Processing..." : "Start Download Process"
+    }
+  }
 }
 
 function setStatus(state, label) {
   const text = label || statusLabels[state] || "Idle"
-  els.statusText.textContent = text
-  els.statusText.dataset.state = state
+  
+  if (els.statusText) {
+    els.statusText.textContent = text
+  }
+
+  if (els.statusDot) {
+    els.statusDot.className = "status-dot"
+    if (state === "running" || state === "queued") {
+      els.statusDot.classList.add("active")
+    } else if (state === "failed" || state === "disconnected") {
+      els.statusDot.classList.add("error")
+    } else {
+      els.statusDot.classList.add("idle")
+    }
+  }
+
   setBusy(state === "running" || state === "queued")
+}
+
+function setActiveJobId(id) {
+    if (els.activeJobId) {
+        els.activeJobId.textContent = id || "None"
+    }
 }
 
 function clearProgress() {
   progressMap.clear()
-  els.progressList.innerHTML = ""
+  if (els.progressList) els.progressList.innerHTML = ""
 }
 
 function clearLogs() {
-  els.logList.innerHTML = ""
+  if (els.logList) els.logList.innerHTML = ""
 }
 
 function resetRun() {
   appState.jobId = null
+  setActiveJobId(null)
   clearProgress()
   clearLogs()
 }
@@ -73,8 +102,10 @@ function formatTime(date) {
 }
 
 function addLog(message, isError = false) {
+  if (!els.logList) return
+
   const line = document.createElement("div")
-  line.className = `log-line${isError ? " error" : ""}`
+  line.className = `log-entry${isError ? " error" : ""}`
   line.textContent = `[${formatTime(new Date())}] ${message}`
   els.logList.appendChild(line)
 
@@ -85,89 +116,97 @@ function addLog(message, isError = false) {
 }
 
 function createProgressRow(id, label, total) {
-  const row = document.createElement("div")
-  row.className = "progress-row"
-  row.dataset.progressId = id
+  if (!els.progressList) return
 
-  const title = document.createElement("div")
-  title.className = "progress-label"
-  title.textContent = label
+  const item = document.createElement("div")
+  item.className = "progress-item"
+  item.dataset.progressId = id
 
-  const bar = document.createElement("div")
-  bar.className = "progress-bar"
-  const barFill = document.createElement("span")
-  bar.appendChild(barFill)
-
-  const meta = document.createElement("div")
-  meta.className = "progress-meta"
+  const header = document.createElement("div")
+  header.className = "progress-header"
+  
+  const titleSpan = document.createElement("span")
+  titleSpan.textContent = label
+  
+  const metaSpan = document.createElement("span")
   const totalLabel = typeof total === "number" ? total : "?"
-  meta.textContent = `0 / ${totalLabel}`
+  metaSpan.textContent = `0 / ${totalLabel}`
+  
+  header.appendChild(titleSpan)
+  header.appendChild(metaSpan)
 
-  row.appendChild(title)
-  row.appendChild(bar)
-  row.appendChild(meta)
+  const track = document.createElement("div")
+  track.className = "progress-track"
+  
+  const fill = document.createElement("div")
+  fill.className = "progress-fill"
+  
+  track.appendChild(fill)
+  item.appendChild(header)
+  item.appendChild(track)
 
-  els.progressList.appendChild(row)
-  progressMap.set(id, { barFill, meta, total, row })
+  els.progressList.appendChild(item)
+  progressMap.set(id, { fill, meta: metaSpan, total, item })
 }
 
 function updateProgressRow(id, value, total) {
   const entry = progressMap.get(id)
-  if (!entry) {
-    return
-  }
+  if (!entry) return
+
   const safeTotal = typeof total === "number" ? total : entry.total
   const safeValue = Math.max(0, Math.min(value, safeTotal || value))
   const percentage = safeTotal ? Math.round((safeValue / safeTotal) * 100) : 0
-  entry.barFill.style.width = `${percentage}%`
+  
+  entry.fill.style.width = `${percentage}%`
   entry.meta.textContent = `${safeValue} / ${safeTotal || "?"}`
 }
 
 function completeProgressRow(id) {
   const entry = progressMap.get(id)
-  if (!entry) {
-    return
-  }
-  entry.barFill.style.width = "100%"
-  entry.row.classList.add("done")
+  if (!entry) return
+  
+  entry.fill.style.width = "100%"
 }
 
 function isRelevantJob(jobId) {
   return !jobId || !appState.jobId || jobId === appState.jobId
 }
 
-els.form.addEventListener("submit", async (event) => {
-  event.preventDefault()
-  const url = els.urlInput.value.trim()
-  if (!url) {
-    addLog("Please enter a URL before starting.", true)
-    return
-  }
-  const mode = els.form.querySelector("input[name=\"mode\"]:checked")?.value || "default"
-
-  resetRun()
-  setStatus("queued", "Queued")
-  setConnectionState("live")
-  addLog("Sending request...")
-
-  try {
-    const resp = await fetch("/api/start", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, mode })
-    })
-    const payload = await resp.json()
-    if (!resp.ok) {
-      throw new Error(payload.error || "Failed to start")
+if (els.form) {
+  els.form.addEventListener("submit", async (event) => {
+    event.preventDefault()
+    const url = els.urlInput.value.trim()
+    if (!url) {
+      addLog("Please enter a URL before starting.", true)
+      return
     }
-    appState.jobId = payload.jobId
-    addLog(`Job accepted: ${appState.jobId}`)
-  } catch (err) {
-    setStatus("failed", "Failed")
-    const message = err instanceof Error ? err.message : String(err)
-    addLog(message || "Failed to start job", true)
-  }
-})
+    const mode = els.form.querySelector("input[name=\"mode\"]:checked")?.value || "default"
+
+    resetRun()
+    setStatus("queued", "Queued")
+    setConnectionState("live")
+    addLog("Initializing request...")
+
+    try {
+      const resp = await fetch("/api/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, mode })
+      })
+      const payload = await resp.json()
+      if (!resp.ok) {
+        throw new Error(payload.error || "Failed to start")
+      }
+      appState.jobId = payload.jobId
+      setActiveJobId(payload.jobId)
+      addLog(`Job accepted: ${appState.jobId}`)
+    } catch (err) {
+      setStatus("failed", "Failed")
+      const message = err instanceof Error ? err.message : String(err)
+      addLog(message || "Failed to start job", true)
+    }
+  })
+}
 
 if (els.clearLogButton) {
   els.clearLogButton.addEventListener("click", () => {
@@ -176,15 +215,22 @@ if (els.clearLogButton) {
 }
 
 const stream = new EventSource("/api/stream")
+
 stream.onopen = () => {
   setConnectionState("live")
 }
 
 stream.addEventListener("status", (event) => {
   const data = JSON.parse(event.data)
-  if (data.output) {
+  if (data.output && els.outputPath) {
     els.outputPath.textContent = data.output
   }
+  
+  if (data.jobId && !appState.jobId && data.state === 'running') {
+      appState.jobId = data.jobId
+      setActiveJobId(data.jobId)
+  }
+
   if (!isRelevantJob(data.jobId)) {
     return
   }
@@ -192,15 +238,16 @@ stream.addEventListener("status", (event) => {
   switch (data.state) {
     case "running":
       appState.jobId = data.jobId
+      setActiveJobId(data.jobId)
       setStatus("running", "Running")
       break
     case "completed":
       setStatus("completed", "Completed")
-      addLog("Job completed.")
+      addLog("Job cycle completed successfully.")
       break
     case "failed":
       setStatus("failed", "Failed")
-      addLog("Job failed.", true)
+      addLog("Job cycle failed.", true)
       break
     default:
       setStatus("idle", "Idle")
@@ -210,41 +257,31 @@ stream.addEventListener("status", (event) => {
 
 stream.addEventListener("log", (event) => {
   const data = JSON.parse(event.data)
-  if (!isRelevantJob(data.jobId)) {
-    return
-  }
+  if (!isRelevantJob(data.jobId)) return
   addLog(data.message)
 })
 
 stream.addEventListener("log-error", (event) => {
   const data = JSON.parse(event.data)
-  if (!isRelevantJob(data.jobId)) {
-    return
-  }
+  if (!isRelevantJob(data.jobId)) return
   addLog(data.message, true)
 })
 
 stream.addEventListener("progress-start", (event) => {
   const data = JSON.parse(event.data)
-  if (!isRelevantJob(data.jobId)) {
-    return
-  }
+  if (!isRelevantJob(data.jobId)) return
   createProgressRow(data.id, data.label, data.total)
 })
 
 stream.addEventListener("progress-update", (event) => {
   const data = JSON.parse(event.data)
-  if (!isRelevantJob(data.jobId)) {
-    return
-  }
+  if (!isRelevantJob(data.jobId)) return
   updateProgressRow(data.id, data.value, data.total)
 })
 
 stream.addEventListener("progress-stop", (event) => {
   const data = JSON.parse(event.data)
-  if (!isRelevantJob(data.jobId)) {
-    return
-  }
+  if (!isRelevantJob(data.jobId)) return
   completeProgressRow(data.id)
 })
 

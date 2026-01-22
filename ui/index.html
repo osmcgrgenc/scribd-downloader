@@ -3,101 +3,102 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>scribd-dl UI</title>
+    <title>Scribd-DL / NeoGlass Control</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <main class="app">
       <header class="hero">
         <div class="hero-badges">
-          <span class="badge">Local downloader</span>
-          <span class="badge badge-outline">Mobile-first UI</span>
+          <span class="badge" id="app-version">v1.0.0</span>
+          <span class="badge">Lifinize.online</span>
         </div>
-        <h1>scribd-dl Control Room</h1>
-        <p>Paste a supported link, choose a mode, and watch the run live.</p>
+        <h1>Lifinize Control</h1>
+        <p>Premium document & podcast downloader powered by Lifinize.</p>
       </header>
 
-      <section class="grid">
-        <form id="download-form" class="card form-card">
-          <label class="field">
-            <span>Document or podcast link</span>
-            <input
-              id="url-input"
-              name="url"
-              type="url"
-              placeholder="https://www.scribd.com/doc/..."
-              required
-              autocomplete="off"
-            />
-          </label>
+      <div class="grid-layout">
+        <!-- Main Form Card -->
+        <form id="download-form" class="card glass-panel form-card">
+          <div class="field">
+            <h3>Target URL</h3>
+            <div class="neo-input-group">
+              <input
+                id="url-input"
+                name="url"
+                type="url"
+                placeholder="https://www.scribd.com/doc/..."
+                required
+                autocomplete="off"
+              />
+            </div>
+          </div>
 
-          <div class="segment">
-            <span class="segment-label">Mode (Scribd only)</span>
+          <div class="field">
+            <h3>Processing Mode</h3>
             <div class="segment-group" role="radiogroup">
               <label class="segment-option">
                 <input type="radio" name="mode" value="default" checked />
-                <span>Default</span>
+                <span>Default (PDF)</span>
               </label>
               <label class="segment-option">
                 <input type="radio" name="mode" value="image" />
-                <span>Image</span>
+                <span>Image (Snapshot)</span>
               </label>
             </div>
           </div>
 
-          <button id="start-button" class="primary" type="submit">Start download</button>
-          <p class="hint">Image mode uses page snapshots for Scribd documents.</p>
+          <button id="start-button" class="neo-btn primary" type="submit">
+            <span>Start Download Process</span>
+          </button>
         </form>
 
-        <aside class="card status-card">
-          <div class="status-head">
-            <div>
-              <h2>Run status</h2>
-              <p>One active job at a time.</p>
-            </div>
-            <span id="status-text" class="status-pill" data-state="idle" aria-live="polite">
-              Idle
-            </span>
-          </div>
-
-          <div class="status-grid">
-            <div>
-              <span class="label">Output folder</span>
-              <span id="output-path" class="value">-</span>
-            </div>
-            <div>
-              <span class="label">Connection</span>
-              <span id="connection-state" class="value" data-connection="live">Live</span>
+        <!-- Status Card -->
+        <aside class="card glass-panel status-card">
+          <div class="card-header">
+            <h2>System Status</h2>
+            <div style="display: flex; align-items: center;">
+              <span id="status-dot" class="status-dot idle"></span>
+              <span id="status-text" class="status-value" style="font-size: 0.85rem;">Idle</span>
             </div>
           </div>
 
-          <div class="support">
-            <span class="label">Supported URLs</span>
-            <div class="support-tags">
-              <span>scribd.com/doc</span>
-              <span>scribd.com/embeds</span>
-              <span>slideshare.net</span>
-              <span>everand.com/podcast</span>
-            </div>
+          <div class="status-row">
+            <span class="status-label">Output Path</span>
+            <span id="output-path" class="status-value">-</span>
+          </div>
+          
+          <div class="status-row">
+            <span class="status-label">Connection</span>
+            <span id="connection-state" class="status-value">Live</span>
+          </div>
+
+          <div class="status-row">
+            <span class="status-label">Active Job</span>
+            <span id="active-job-id" class="status-value">None</span>
           </div>
         </aside>
-      </section>
+      </div>
 
-      <section class="stream">
-        <div class="card">
+      <!-- Live Stream Section -->
+      <section class="stream-grid">
+        <div class="card glass-panel">
           <div class="card-header">
-            <h2>Progress</h2>
-            <span class="tag">live</span>
+            <h2>Live Progress</h2>
           </div>
-          <div id="progress-list" class="progress-list"></div>
+          <div id="progress-list" class="progress-list">
+            <!-- Dynamic Progress Items will appear here -->
+          </div>
         </div>
 
-        <div class="card">
+        <div class="card glass-panel">
           <div class="card-header">
-            <h2>Logs</h2>
-            <button id="clear-log" class="ghost" type="button">Clear</button>
+            <h2>Event Logs</h2>
+            <button id="clear-log" class="neo-btn" style="padding: 6px 12px; font-size: 0.8rem;">Clear</button>
           </div>
-          <div id="log" class="log" role="log" aria-live="polite"></div>
+          <div id="log" class="log-container" role="log" aria-live="polite">
+            <!-- Logs will appear here -->
+          </div>
         </div>
       </section>
     </main>

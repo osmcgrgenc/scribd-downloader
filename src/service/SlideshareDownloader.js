@@ -1,84 +1,112 @@
-import { puppeteerSg } from "../utils/request/PuppeteerSg.js";
-import { pdfGenerator } from "../utils/io/PdfGenerator.js";
-import { configLoader } from "../utils/io/ConfigLoader.js";
+import { BaseDownloader } from '../core/BaseDownloader.js'
+import { puppeteerSg } from "../utils/request/PuppeteerSg.js"
+import { pdfGenerator } from "../utils/io/PdfGenerator.js"
+import { configLoader } from "../utils/io/ConfigLoader.js"
 import { directoryIo } from "../utils/io/DirectoryIo.js"
+import { cliReporter } from "../utils/Reporter.js"
 import * as slideshareRegex from "../const/SlideshareRegex.js"
 import { Image } from "../object/Image.js"
-import sharp from "sharp";
-import axios from "axios";
+import sharp from "sharp"
+import axios from "axios"
 import fs from "fs"
-import sanitize from "sanitize-filename";
-import { cliReporter } from "../utils/Reporter.js"
+import path from 'path'
+import sanitize from "sanitize-filename"
 
-
-const output = configLoader.load("DIRECTORY", "output")
-const filename = configLoader.load("DIRECTORY", "filename")
-
-class SlideshareDownloader {
+class SlideshareDownloader extends BaseDownloader {
     constructor() {
+        super()
         if (!SlideshareDownloader.instance) {
             SlideshareDownloader.instance = this
+            this.output = configLoader.load("DIRECTORY", "output", "output")
+            this.filename = configLoader.load("DIRECTORY", "filename", "title")
         }
         return SlideshareDownloader.instance
     }
 
+    /**
+     * @param {string} url 
+     * @param {object} reporter 
+     */
     async execute(url, reporter = cliReporter) {
-        if (url.match(slideshareRegex.SLIDESHOW)) {
-            await this.slideshow(url, slideshareRegex.SLIDESHOW.exec(url)[1], reporter)
-        } else if (url.match(slideshareRegex.PPT)) {
-            await this.slideshow(url, slideshareRegex.PPT.exec(url)[1], reporter)
+        const slideshowMatch = slideshareRegex.SLIDESHOW.exec(url)
+        const pptMatch = slideshareRegex.PPT.exec(url)
+
+        if (slideshowMatch) {
+            await this._processSlideshow(url, slideshowMatch[1], reporter)
+        } else if (pptMatch) {
+            await this._processSlideshow(url, pptMatch[1], reporter)
         } else {
             throw new Error(`Unsupported URL: ${url}`)
         }
     }
 
-    async slideshow(url, id, reporter) {
-        // prepare temp dir
-        const dir = `${output}/${id}`
-        await directoryIo.create(dir)
+    async _processSlideshow(url, id, reporter) {
+        const tempDir = path.join(this.output, id)
+        let page
 
-        // navigate to slideshare
-        const page = await puppeteerSg.getPage(url)
+        try {
+            await directoryIo.create(tempDir)
 
-        // wait rendering
-        await new Promise(resolve => setTimeout(resolve, 1000))
+            // 1. Navigate
+            page = await puppeteerSg.getPage(url)
+            await this.wait(1000)
 
-        // get the title
-        const h1 = await page.$("h1.title")
-        const title = decodeURIComponent(await h1.evaluate((el) => el.textContent.trim()))
+            // 2. Extract Title
+            let title = id
+            try {
+                const h1 = await page.$("h1.title")
+                if (h1) {
+                    title = decodeURIComponent(await h1.evaluate(el => el.textContent.trim()))
+                }
+            } catch (err) {
+                // Ignore title extraction failure
+            }
 
-        // get slides images
-        const srcs = await page.$$eval("img[id^='slide-image-']", imgs => imgs.map(img => img.src));
+            // 3. Extract Image Sources
+            const srcs = await page.$$eval("img[id^='slide-image-']", imgs => imgs.map(img => img.src))
+            
+            if (!srcs || srcs.length === 0) {
+                throw new Error("No slides found to download.")
+            }
 
-        // iterate all images
-        const images = []
-        reporter.log("Downloading slides...")
-        const imageProgress = reporter.createProgress("Download slides", srcs.length)
-        for (let i = 0; i < srcs.length; i++) {
-            const src = srcs[i];
-            const path = `${dir}/${(i + 1).toString().padStart(4, '0')}.png`
+            // 4. Download & Convert Images
+            const images = []
+            reporter.log("Downloading slides...")
+            const imageProgress = reporter.createProgress("Download slides", srcs.length)
 
-            // convert the webp (even it shows jpg) to png
-            const resp = await axios.get(src, { responseType: 'arraybuffer' })
-            const imageBuffer = await sharp(resp.data).toFormat('png').toBuffer();
-            fs.writeFileSync(path, Buffer.from(imageBuffer, 'binary'))
+            for (let i = 0; i < srcs.length; i++) {
+                const src = srcs[i]
+                const imgPath = path.join(tempDir, `${(i + 1).toString().padStart(4, '0')}.png`)
 
-            const metadata = await sharp(path).metadata();
-            images.push(new Image(path, metadata.width, metadata.height));
-            imageProgress.update(i + 1);
+                try {
+                    const resp = await axios.get(src, { responseType: 'arraybuffer' })
+                    // Convert WebP/JPG to PNG for consistent PDF generation
+                    const imageBuffer = await sharp(resp.data).toFormat('png').toBuffer()
+                    fs.writeFileSync(imgPath, Buffer.from(imageBuffer, 'binary'))
+
+                    const metadata = await sharp(imgPath).metadata()
+                    images.push(new Image(imgPath, metadata.width, metadata.height))
+                } catch (err) {
+                    reporter.error(`Failed to download slide ${i + 1}: ${err.message}`)
+                }
+                
+                imageProgress.update(i + 1)
+            }
+            imageProgress.stop()
+
+            // 5. Generate PDF
+            const finalPdfPath = path.join(this.output, `${sanitize(this.filename === "title" ? title : id)}.pdf`)
+            reporter.log("Generating PDF...")
+            await pdfGenerator.generate(images, finalPdfPath, reporter)
+
+            // 6. Cleanup
+            await directoryIo.remove(tempDir)
+
+        } catch (error) {
+            throw error
+        } finally {
+            if (page) await page.close()
         }
-        imageProgress.stop();
-
-        // generate pdf
-        const outputPath = `${output}/${sanitize(filename == "title" ? title : id)}.pdf`
-        reporter.log("Generating PDF...")
-        await pdfGenerator.generate(images, outputPath, reporter)
-
-        // remove temp dir
-        directoryIo.remove(`${dir}`)
-
-        await page.close()
-        await puppeteerSg.close()
     }
 }
 

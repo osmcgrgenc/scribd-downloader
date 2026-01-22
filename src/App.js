@@ -15,14 +15,23 @@ class App {
     }
 
     async execute(url, flag, reporter = cliReporter) {
-        if (url.match(scribdRegex.DOMAIN)) {
-            await scribdDownloader.execute(url, flag, reporter)
-        } else if (url.match(slideshareRegex.DOMAIN)) {
-            await slideshareDownloader.execute(url, reporter)
-        } else if (url.match(everandRegex.DOMAIN)) {
-            await everandDownloader.execute(url, reporter)
-        } else {
-            throw new Error(`Unsupported URL: ${url}`)
+        if (!url) {
+            throw new Error("URL cannot be empty")
+        }
+
+        try {
+            if (url.match(scribdRegex.DOMAIN)) {
+                await scribdDownloader.execute(url, flag, reporter)
+            } else if (url.match(slideshareRegex.DOMAIN)) {
+                await slideshareDownloader.execute(url, reporter)
+            } else if (url.match(everandRegex.DOMAIN)) {
+                await everandDownloader.execute(url, reporter)
+            } else {
+                throw new Error(`Unsupported URL: ${url}`)
+            }
+        } catch (error) {
+            // Ensure error propagates to caller (CLI or UI) for handling
+            throw error
         }
     }
 }
